@@ -8,7 +8,9 @@
     },
     "license": "MIT",
     "dependencies": {
-        "ws": "^7.2.3"
+        "discord": "^0.8.2",
+        "discord.js": "^14.21.0",
+        "ws": "^7.5.10"
     },
     "scripts": {
         "debug": "node --inspect-brk main.js",
