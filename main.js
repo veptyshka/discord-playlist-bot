@@ -2,7 +2,6 @@ const { Client, GatewayIntentBits } = require('discord.js');
 const https = require('https');
 const qs = require('querystring');
 const auth = require('./auth.json');
-const { error } = require('console');
 
 
 const client = new Client({
@@ -13,8 +12,8 @@ const client = new Client({
     ]
 });
 
-let playListID = null;
-let uploadPlayListID = null;
+let playlistID = null;
+let uploadPlaylistID = null;
 let discordChannel = null;
 let lastCheck = new Date().toISOString();
 let scheduler = null;
@@ -39,71 +38,71 @@ function makeYouTubeRequest(url, callback) {
     });
 }
 
-function getPlayListInfo(playListId, callback) {
+function getPlaylistInfo(playlistId, callback) {
     const url = `https://www.googleapis.com/youtube/v3/playlists?${qs.stringify({
         part: 'snippet',
-        id: playListId,
+        id: playlistId,
         maxResults: 1,
         key: auth.youtube_token
     })}`;
-
+    
     makeYouTubeRequest(url, (error, data) => {
         if (error) {
             callback(error, null);
             return;
         }
-
+        
         if (data.error) {
             callback(new Error(data.error.message), null);
             return;
         }
-
+        
         if (!data.items || data.items.length === 0) {
             callback(new Error('Playlist is private or not found'), null);
             return;
         }
-
+        
         callback(null, data.items[0]);
     });
 }
 
-function getUploadPlayList(channelId, callback) {
+function getUploadPlaylist(channelId, callback) {
     const url = `https://www.googleapis.com/youtube/v3/channels?${qs.stringify({
         part: 'contentDetails',
         id: channelId,
         maxResults: 1,
         key: auth.youtube_token
     })}`;
-
+    
     makeYouTubeRequest(url, (error, data) => {
         if (error) {
             callback(error, null);
             return;
         }
-
+        
         if (data.error) {
             callback(new Error(data.error.message), null);
             return;
         }
-
+        
         if (!data.items || data.items.length === 0) {
             callback(new Error('Channel not found'), null);
             return;
         }
-
-        const uploadsPlayListId = data.items[0].contentDetails.relatedPlaylists.uploads;
-        callback(null, uploadsPlayListId);
+        
+        const uploadsPlaylistId = data.items[0].contentDetails.relatedPlaylists.uploads;
+        callback(null, uploadsPlaylistId);
     });
 }
 
-function getRecentUploads(uploadsPlayListId, sinceDate, callback) {
+function getRecentUploads(uploadsPlaylistId, sinceDate, callback) {
     const url = `https://www.googleapis.com/youtube/v3/playlistItems?${qs.stringify({
         part: 'snippet',
-        playListId: uploadsPlayListId,
+        playlistId: uploadsPlaylistId,
         maxResults: 25,
         key: auth.youtube_token
     })}`;
-
+    
     makeYouTubeRequest(url, (error, data) => {
         if (error) {
             callback(error, null);
@@ -120,7 +119,6 @@ function getRecentUploads(uploadsPlayListId, sinceDate, callback) {
             return;
         }
         
-        // Фильтруем видео, добавленные после lastCheck
         const recentVideos = data.items.filter(item => 
             item.snippet.publishedAt >= sinceDate
         );
@@ -129,7 +127,7 @@ function getRecentUploads(uploadsPlayListId, sinceDate, callback) {
     });
 }
 
-function checkVideoInPlayList(videoId, targetPlayListId, callback) {
+function checkVideoInPlaylist(videoId, targetPlaylistId, callback) {
     const url = `https://www.googleapis.com/youtube/v3/playlistItems?${qs.stringify({
         part: 'snippet',
         playlistId: targetPlaylistId,
@@ -137,7 +135,7 @@ function checkVideoInPlayList(videoId, targetPlayListId, callback) {
         maxResults: 1,
         key: auth.youtube_token
     })}`;
-
+    
     makeYouTubeRequest(url, (error, data) => {
         if (error) {
             callback(error, null);
@@ -148,56 +146,56 @@ function checkVideoInPlayList(videoId, targetPlayListId, callback) {
             callback(null, false);
             return;
         }
-
+        
         const found = data.items && data.items.length > 0;
         callback(null, found ? data.items[0] : false);
     });
 }
 
 function checkForNewVideos() {
-    if (!uploadPlayListID || !playListID || !discordChannel) {
+    if (!uploadPlaylistID || !playlistID || !discordChannel) {
         console.log('Not all parameters set up for check');
         return;
     }
-
+    
     console.log('Checking for new videos...');
-
-    getRecentUploads(uploadPlayListID, lastCheck, (error, recentVideos) => {
+    
+    getRecentUploads(uploadPlaylistID, lastCheck, (error, recentVideos) => {
         if (error) {
             console.error('Error getting new videos:', error.message);
             return;
         }
-
+        
         console.log(`Found ${recentVideos.length} recent videos`);
-
+        
         recentVideos.forEach(video => {
             const videoId = video.snippet.resourceId.videoId;
-
-            checkVideoInPlayList(videoId, playListID, (error, videoInPlayList) => {
+            
+            checkVideoInPlaylist(videoId, playlistID, (error, videoInPlaylist) => {
                 if (error) {
                     console.error('Error checking playlist:', error.message);
                     return;
                 }
-
-                if (videoInPlayList) {
-                    console.log('Found new video in playlist:', videoInPlayList.snippet.title);
-
+                
+                if (videoInPlaylist) {
+                    console.log('Found new video in playlist:', videoInPlaylist.snippet.title);
+                    
                     const channel = client.channels.cache.get(discordChannel);
                     if (channel) {
                         const videoUrl = `https://youtu.be/${videoId}`;
-                        const channelName = videoInPlayList.snippet.videoOwnerChannelTitle || 'Unknown channel';
-
+                        const channelName = videoInPlaylist.snippet.videoOwnerChannelTitle || 'Unknown Channel';
+                        
                         const message = `🎥 **New video added into playlist!**\n` +
-                                        `**${videoInPlayList.snippet.title}**\n` +
+                                        `**${videoInPlaylist.snippet.title}**\n` +
                                         `Channel: ${channelName}\n` +
                                         `${videoUrl}`;
-
+                        
                         channel.send(message).catch(console.error);
                     }
                 }
             });
         });
-
+        
         lastCheck = new Date().toISOString();
     });
 }
@@ -205,29 +203,29 @@ function checkForNewVideos() {
 
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
-
+    
     const content = message.content.toLowerCase();
-
+    
     if (content.startsWith('yp!set ')) {
-        const newPlayListId = message.content.slice(7).trim();
-
-        if (!newPlayListId) {
+        const playlistIdFromMessage = message.content.slice(7).trim();
+        
+        if (!playlistIdFromMessage) {
             message.reply('Please specify playlist ID. Example: `yp!set PLrAJxTYMBJOQISYFDNy8RwYfvpQwLOQ1Q`');
             return;
         }
-
+        
         message.reply('⏳ Checking playlist...');
-
-        getPlayListInfo(newPlayListID, (error, playListInfo) => {
+        
+        getPlaylistInfo(playlistIdFromMessage, (error, playlistInfo) => {
             if (error) {
-                message.reply(`❌ Error: ${error.message}`);   
+                message.reply(`❌ Error: ${error.message}`);
                 return;
             }
-
-            playListID = newPlayListID;
-            const channelId = playListInfo.snippet.channelId;
-
-            getUploadPlayList(channelId, (error, uploadPlayListId) => {
+            
+            playlistID = playlistIdFromMessage;
+            const channelId = playlistInfo.snippet.channelId;
+            
+            getUploadPlaylist(channelId, (error, uploadsPlaylistId) => {
                 if (error) {
                     message.reply(`❌ Error getting channel: ${error.message}`);
                     return;
@@ -235,11 +233,11 @@ client.on('messageCreate', async (message) => {
                 
                 uploadPlaylistID = uploadsPlaylistId;
                 lastCheck = new Date().toISOString();
-
+                
                 message.reply(`✅ Playlist set: **${playlistInfo.snippet.title}**\n` +
                             `Channel: ${playlistInfo.snippet.channelTitle}\n` +
                             `Every 30 minutes check activated!`)
-
+                
                 if (scheduler) {
                     clearInterval(scheduler);
                 }
@@ -247,22 +245,22 @@ client.on('messageCreate', async (message) => {
             });
         });
     }
-
+    
     else if (content === 'yp!get') {
-        if (!playListID) {
+        if (!playlistID) {
             message.reply('❌ Please before set the playlist with `yp!set [playlistId]`');
             return;
         }
-
+        
         message.reply('⏳ Checking for new videos...');
         checkForNewVideos();
     }
-
+    
     else if (content === 'yp!channel') {
-        discordChannel === message.channel.id;
-        message.reply('✅ Channel for notifications set!')
+        discordChannel = message.channel.id;
+        message.reply('✅ Channel for notifications set!');
     }
-
+    
     else if (content === 'yp!help') {
         const helpMessage = `🤖 **YouTube Playlist Bot - Commands:**\n\n` +
                           `\`yp!set [playlistId]\` - Set playlist for checking\n` +
@@ -276,13 +274,13 @@ client.on('messageCreate', async (message) => {
                           `Example: \`PLrAJxTYMBJOQISYFDNy8RwYfvpQwLOQ1Q\``;
         message.reply(helpMessage);
     }
-
+    
     else if (content === 'yp!status') {
         let status = '📊 **Current settings:**\n\n';
         status += `Playlist: ${playlistID ? '✅ Set' : '❌ Not set'}\n`;
         status += `Notification channel: ${discordChannel ? '✅ Set' : '❌ Not set'}\n`;
         status += `Auto-check: ${scheduler ? '✅ Active (every 30 minutes)' : '❌ Inactive'}\n`;
-        status += `Last check: ${lastCheck}`; 
+        status += `Last check: ${lastCheck}`;  
         message.reply(status);
     }
 });
@@ -298,4 +296,4 @@ process.on('unhandledRejection', error => {
     console.error('Unhandled promise rejection:', error);
 });
 
-client.login(auth.discord_token)
+client.login(auth.discord_token);
